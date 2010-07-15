@@ -1,0 +1,10 @@
+1 - Edit the used pins in MidiKbd.lua and Keyboard.lua
+2 - Build using romfs=compile
+3 - Open a terminal
+4 - Open Lua
+5 - dofile( "/rom/midikbd.lc" )
+6 - kbd()
+
+Keys A to ' and W to O are the notes ( just like Piano )
+Keys 1, 2, 3 and 4 sends a control change message for selected control
+Keys 1, 2, 3, 4, 5 and 6 of the NUMPAD select a control
