@@ -87,6 +87,18 @@ char eluamidi_init( char port )
   return ( actual_baud >= 0.99 * baud ) && ( actual_baud <= 1.01 * baud );
 }
 
+// Internal function to split 14 bit data into 2 bytes
+void decode_14bit( int n, char *out )
+{
+  out[0] = n & 127;
+  out[1] = ( n >> 7 ) & 127;
+}
+
+// Internal function to join 2 bytes into a 14 bit number
+int encode_14bit( fine, coarse )
+{
+  return fine + 128 * coarse;
+}
 
 const LUA_REG_TYPE eluamidi_map[] = {
   { LSTRKEY( "init" ), LFUNCVAL( eluamidi_init_lua ) },
