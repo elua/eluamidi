@@ -1,4 +1,4 @@
-#include "eluamidi.h"
+i// #include "eluamidi.h"
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
@@ -15,8 +15,8 @@
 // Define uart configuration
 #define baud 31250
 #define data_bits 8
-#define stop_bits uart.STOP_1
-#define parity uart.PAR_NONE
+#define stop_bits PLATFORM_UART_STOPBITS_1
+#define parity PLATFORM_UART_PARITY_NONE
 
 // Midi messages
 #define note_off 0x80
@@ -82,7 +82,9 @@ char uart_port = 0;
 char eluamidi_init( char port )
 {
   uart_port = port;
+  u32 actual_baud = platform_uart_setup( port, baud, databits, parity, stop_bits );
 
+  return ( actual_baud >= 0.99 * baud ) && ( actual_baud <= 1.01 * baud );
 }
 
 
