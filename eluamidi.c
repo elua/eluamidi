@@ -79,7 +79,7 @@ char uart_port = 0;
 
 // Try to set the baud rate in the specified port ( uart )
 // returns 1 if successful or 0 otherwise
-char eluamidi_init( char port )
+char midi_init( char port )
 {
   uart_port = port;
   u32 actual_baud = platform_uart_setup( port, baud, databits, parity, stop_bits );
@@ -87,23 +87,146 @@ char eluamidi_init( char port )
   return ( actual_baud >= 0.99 * baud ) && ( actual_baud <= 1.01 * baud );
 }
 
+// Is n a 7bit number?
+char midi_7bit( char n )
+{
+  return (( n >=0 ) && ( n <= 127 ));
+}
+
 // Internal function to split 14 bit data into 2 bytes
-void decode_14bit( int n, char *out )
+void midi_decode_14bit( int n, char *out )
 {
   out[0] = n & 127;
   out[1] = ( n >> 7 ) & 127;
 }
 
 // Internal function to join 2 bytes into a 14 bit number
-int encode_14bit( fine, coarse )
+int midi_encode_14bit( fine, coarse )
 {
   return fine + 128 * coarse;
 }
 
+// Internal function to validate a channel number
+inline char elua_midi_validade_channel( char channel )
+{
+  return ( channel >= 1 ) && ( channel <= 16 );
+}
+
+// Internal function to assemble a status package and send it
+void midi_send_status( char channel, char message )
+{
+  if (( message < note_off ) || ( message > pitch_wheel ))
+    return;
+
+  platform_uart_send( uart_port, message + channel );
+}
+
+// Internal function to split a status byte into message code and channel
+// out: message, channel
+void elua_midi_split_status( char status, char * out )
+{
+  out[0] = status & 0xF0;
+  out[1] = ( status & 0x0F ) +1;
+}
+
+// Sends a control change message for a 7 bit control
+void midi_send_control_change( char channel, char control, char value )
+{
+  if ( !midi_7bit( value ))
+    return;
+
+  if ( !midi_7bit( control ))
+    return;
+
+  midi_send_status( channel, control_change );
+  platform_uart_write( uart_port, control );
+  platform_uart_write( uart_port, value );
+}
+
+
+// Sends a control change for a control with 14 bit precision
+void midi_send_14bit_control_change( char channel, char control_coarse, char control_fine, int value )
+{
+  char num[2];
+  
+  if (( value < 0 ) || ( value > 16383 ))
+    return;
+
+  if ( !midi_7bit( control_coarse ))
+    return;
+
+  if ( !midi_7bit( control_fine ))
+    return;
+
+  midi_decode_14bit( value, num );
+
+  midi_send_control_change( channel, control_coarse, num[1] );
+  midi_send_control_change( channel, control_fine, num[0] );
+}
+
+// Internal function to validate a system exclusive channel
+char midi_validate_se_channel( char channel )
+{
+  return (( note >=0 ) && ( note <= 128 ));
+}
+
+
+// Internal function that returns the number of data bytes of a message
+// Status is the Status Byte of the message
+char midi_message_data_len( char status )
+{
+  char ss[2];
+  midi_split_status( status, ss );
+
+  switch ( ss[0] )
+  {
+    case note_off: return 16;
+    case note_on: return 16;
+    case after_touch: return 16;
+    case control_change: return 16;
+    case program_change: return 8;
+    case channel_pressure: return 8;
+    case pitch_wheel: return 14;
+    case system_exclusive_begin: return msg_size_unknown;
+  }
+}
+
+char midi_message_data_size( char status )
+{
+  char data_len = midi_message_data_len( status );
+
+  if ( data_len == 16 )
+    return 2;
+  else if ( data_len == 8 )
+    return 1;
+  else if ( data_len == 14 )
+    return 1;
+  else
+    return msg_size_unknown;
+}
+
+// Internal function used by receive that returns the number of data bytes
+// expected for a message
+char message_data_bytes( char status )
+{
+  char data_len = midi_message_data_len( status );
+
+  if ( data_len == 16 )
+    return 2;
+  else if ( data_len == 8 )
+    return 1;
+  else if ( data_len == 14 )
+    return 2;
+  else
+    return msg_size_unknown;
+}
+
+// Internal function to send a note on or note off
+ send_note( channel, note, on, velocity )  -- OK
 const LUA_REG_TYPE eluamidi_map[] = {
-  { LSTRKEY( "init" ), LFUNCVAL( eluamidi_init_lua ) },
-  { LSTRKEY( "write" ), LFUNCVAL( eluamidi_write_lua ) },
-  { LSTRKEY( "goto" ), LFUNCVAL( eluamidi_goto_lua ) },
+  { LSTRKEY( "init" ), LFUNCVAL( midi_init_lua ) },
+  { LSTRKEY( "write" ), LFUNCVAL( midi_write_lua ) },
+  { LSTRKEY( "goto" ), LFUNCVAL( midi_goto_lua ) },
   { LNILKEY, LNILVAL }
 };
 
