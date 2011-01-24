@@ -88,7 +88,7 @@ char midi_init( char port )
 }
 
 // Is n a 7bit number?
-char midi_7bit( char n )
+inline char midi_7bit( char n )
 {
   return (( n >=0 ) && ( n <= 127 ));
 }
@@ -101,13 +101,13 @@ void midi_decode_14bit( int n, char *out )
 }
 
 // Internal function to join 2 bytes into a 14 bit number
-int midi_encode_14bit( fine, coarse )
+inline int midi_encode_14bit( fine, coarse )
 {
   return fine + 128 * coarse;
 }
 
 // Internal function to validate a channel number
-inline char elua_midi_validade_channel( char channel )
+inline char midi_validate_channel( char channel )
 {
   return ( channel >= 1 ) && ( channel <= 16 );
 }
@@ -123,7 +123,7 @@ void midi_send_status( char channel, char message )
 
 // Internal function to split a status byte into message code and channel
 // out: message, channel
-void elua_midi_split_status( char status, char * out )
+void midi_split_status( char status, char * out )
 {
   out[0] = status & 0xF0;
   out[1] = ( status & 0x0F ) +1;
@@ -167,9 +167,8 @@ void midi_send_14bit_control_change( char channel, char control_coarse, char con
 // Internal function to validate a system exclusive channel
 char midi_validate_se_channel( char channel )
 {
-  return (( note >=0 ) && ( note <= 128 ));
+  return (( channel >=0 ) && ( channel <= 128 ));
 }
-
 
 // Internal function that returns the number of data bytes of a message
 // Status is the Status Byte of the message
@@ -207,7 +206,7 @@ char midi_message_data_size( char status )
 
 // Internal function used by receive that returns the number of data bytes
 // expected for a message
-char message_data_bytes( char status )
+char midi_message_data_bytes( char status )
 {
   char data_len = midi_message_data_len( status );
 
@@ -222,7 +221,177 @@ char message_data_bytes( char status )
 }
 
 // Internal function to send a note on or note off
- send_note( channel, note, on, velocity )  -- OK
+void midi_send_note( char channel, char note, char on, char velocity )
+{
+  if ( on )
+    midi_send_status( channel, note_on );
+  else
+    midi_send_status( channel, note_off );
+
+  platform_uart_send( uart_port, note );
+  platform_uart_send( uart_port, velocity );
+}
+
+// Sends a note on message
+void midi_send_note_on( char channel, char note, char velocity )
+{
+  midi_send_note( channel, note, 1, velocity );
+}
+
+// Sends a note off message
+void midi_send_note_off( char channel, char note, char velocity )
+{
+  midi_send_note( channel, note, 0, velocity );
+}
+
+// Sends an after touch / key pressure message
+void midi_send_after_touch( char channel, char note, char pressure )
+{
+  if ( !midi_validate_channel( channel ) )
+    return;
+
+  if ( !midi_7bit( note ) )
+    return;
+
+  midi_send_status( channel, after_touch );
+  platform_uart_send( uart_port, note );
+  platform_uart_send( uart_port, pressure );
+}
+
+// Sends a program / path / instrument / preset change message
+void midi_send_program_change( char channel, char program )
+{
+  if (!midi_validate_channel( channel ) )
+    return;
+
+  midi_send_status( channel, program_change );
+  platform_uart_send( uart_port, program );
+}
+
+// Sends a channel pressure message - sets the pressure for all notes of the channel
+void midi_send_channel_pressure( char channel, char pressure )
+{
+  if ( !midi_validate_channel( channel ) )
+    return;
+
+  midi_send_status( channel, channel_pressure );
+  platform_uart_send( uart_port, pressure );
+}
+
+// Sends a pitch wheel message
+void midi_send_pitch_wheel( char channel, char pitch )
+{
+  if ( !midi_validate_channel( channel ) )
+    return;
+
+  char decoded[2];
+
+  midi_decode_14bit( pitch + pitch_wheel_middle, decoded );
+
+  midi_send_status( channel, pitch_wheel )
+  platform_uart_send( uart_port, decoded[0] );
+  platform_uart_send( uart_port, decoded[1] );
+}
+
+// Sends a System Exclusive stream - Use: download a memory
+// dump, send raw data, set custom parameters ...
+// All the bytes in data must not contain the bit #7 set !
+// The id is your Manufacturer's ID ( a number between 0 and 127 )
+void midi_send_system_exclusive( char id, char * data, char data_size )  // Having some trouble
+{
+  // Validate ID
+  if ( !midi_7bit( id ))
+    return;
+
+  // Validate data ( i.e look for bytes with the bit #7 set )
+  int i;
+  for ( i=0; i<data_size; i++)
+    if ( data[i] & 128 )
+      return;
+
+  // Send Data
+  platform_uart_send( uart_port, system_exclusive_begin ) ;
+  platform_uart_send( uart_port, id );
+
+  for ( i=0; i<data_size; i++ )
+    platform_uart_send( uart_port, data[i] );
+
+  platform_uart_send( uart_port, system_exclusive_end );
+}
+
+// Internal function to send a General MIDI system enable / disable message
+void midi_send_gm_system_enable_disable( char channel, char enable )
+{  
+  char ed;
+
+  if ( enable )
+    ed = 0x01; // Enable code
+  else
+    ed = 0x00; // Disable code
+
+  if ( !midi_validate_se_channel( channel ) )
+    return;
+
+  channel = channel -1
+  
+  platform_uart_send( uart_port, system_exclusive_begin );
+  platform_uart_send( uart_port, non_realtime_id );
+  platform_uart_send( uart_port, channel );
+  platform_uart_send( uart_port, se_gm_system_enable_disable );
+  platform_uart_send( uart_port, ed );
+  platform_uart_send( uart_port, system_exclusive_end );
+}
+
+// Sends a General MIDI System Enable message
+void midi_send_gm_system_enable( char channel )
+{
+  midi_send_gm_system_enable_disable( channel, true );
+}
+
+// Sends a General MIDI System Disable message
+void midi_send_gm_system_disable( char channel )
+{
+  midi_send_gm_system_enable_disable( channel, false );
+}
+
+// Sends a Master Volume message - Sets the device's Master Volume ( 14 bit - value )
+void midi_send_master_volume( char channel, unsigned int volume )
+{
+  // Validate the volume
+  if ( volume & ( 1 << 14 ))
+    return;
+
+  if ( !midi_validate_se_channel( channel ) )
+    return;
+
+  // Convert channel
+  channel = channel -1;
+
+  // Split 14 bit into 2 bytes
+  char out[2];
+  midi_decode_14bit( volume, out );
+
+  platform_uart_send( uart_port, system_exclusive_begin );
+  platform_uart_send( uart_port, realtime_id );
+  platform_uart_send( uart_port, channel );
+  platform_uart_send( uart_port, se_device_control );
+  platform_uart_send( uart_port, se_master_volume );
+  platform_uart_send( uart_port, out[0] );
+  platform_uart_send( uart_port, out[1] );
+  platform_uart_send( uart_port, system_exclusive_end );
+}
+
+// Sends a Quarter Frame Message - Used to keep slave in sync
+void midi_send_quarter_frame( char time_code )
+{
+  // Validate time_code
+  if ( !midi_7bit( time_code ) )
+    return;
+
+  platform_uart_send( uart_port, quarter_frame );
+  platform_uart_send( uart_port, time_code );
+}
+
 const LUA_REG_TYPE eluamidi_map[] = {
   { LSTRKEY( "init" ), LFUNCVAL( midi_init_lua ) },
   { LSTRKEY( "write" ), LFUNCVAL( midi_write_lua ) },
