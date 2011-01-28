@@ -388,8 +388,83 @@ void midi_send_quarter_frame( char time_code )
   if ( !midi_7bit( time_code ) )
     return;
 
-  platform_uart_send( uart_port, quarter_frame );
+  platform_uart_send( uart_port, tm_quarter_frame );
   platform_uart_send( uart_port, time_code );
+}
+
+// Sends a Song Position Message - Tells the slaves to go to the specified song position
+// Note: Each MIDI Beat is a 16th note. Song starts at beat 0
+void midi_send_song_position( int beat )
+{
+  // Validate the beat
+  if ( beat & ( 1 << 14 ))
+    return;
+
+  char out[2];
+  midi_decode_14bit( beat, out );
+
+  platform_uart_send( uart_port, tm_song_position );
+  platform_uart_send( uart_port, out[0] );
+  platform_uart_send( uart_port, out[1] );
+}
+
+// Sends a Song Select Message - Tells slaves to change to a specified song
+void midi_send_song_select( char song )
+{
+  // Validate song
+  if ( !midi_7bits( song ) )
+    return;
+
+  platform_uart_send( uart_port, tm_song_select );
+  platform_uart_send( uart_port, song );
+}
+
+// Sends a Tune Request Message - Tells the slave to perform a tuning calibration
+void midi_send_tune_request()
+{
+  platform_uart_send( uart_port, tm_tune_request );
+}
+
+// Sends a MIDI Clock Message - Used to sync the slave and the master devices
+// Note: 
+//   There are 24 MIDI Clocks in every quarter note.
+//   1 bpm = 1 quarter note per minute
+//   1 bmp = 24 Clocks per minute
+void midi_send_clock()
+{
+  platform_uart_send( uart_port, tm_clock );
+}
+
+// Sends a MIDI Start Message - Tells slaves to play from the beginning
+void midi_send_start()
+{
+  platform_uart_send( uart_port, tm_start );
+}
+
+// Sends a MIDI Continue Message - Tells slaves to play from the current position
+// Note: On stop, the devices must keep the current song position
+void midi_send_continue()
+{
+  platform_uart_send( uart_port, tm_continue );
+}
+
+// Sends a MIDI Stop Message ( a.k.a pause ) - Tells slaves to stop playing
+void midi_send_stop()
+{
+  platform_uart_send( uart_port, tm_stop );
+}
+
+// Sends a MIDI Active Sense Message - Tells other MIDI devices that the
+// connection is still active
+void midi_send_active_sense()
+{
+  platform_uart_send( uart_port, tm_active_sense );
+}
+
+// Sends a Reset Message - Tells slaves to reset themselves to their default states
+void midi_send_reset()
+{
+  platform_uart_send( uart_port, tm_reset );
 }
 
 const LUA_REG_TYPE eluamidi_map[] = {
