@@ -467,6 +467,26 @@ void midi_send_reset()
   platform_uart_send( uart_port, tm_reset );
 }
 
+// Reads data from uart and interprets it
+// Possible return values:
+//   defs[ "msg_new_message" ] -> A new message was received and finished
+//   defs[ "msg_in_message" ]  -> A new message was received, but is not complete
+//   defs[ "msg_no_message" ]  -> Nothing or invalid data was received
+//
+// The data read is stored in the message table:
+//   message[ defs[ "msg_code" ] ]    -> MIDI code ( from defs table ) of the message
+//   message[ defs[ "msg_channel" ] ] -> MIDI channel of the message
+//   message[ defs[ "msg_data" ] ]    -> Data 1 parameter of the message
+//   message[ defs[ "msg_data2" ] ]   -> Data 2 parameter of the message
+//
+// Note: Not all messages have Data 1 or Data 2
+// Note 2: If a 14bit value is expectes, message[ defs[ "msg_data" ] ] will hold the 14bit value
+// Note 3: On system exclusive messages, message[ defs[ "msg_channel" ] ] is the ID
+char receive( int timeout, char timer_id )
+{
+  
+}
+
 const LUA_REG_TYPE eluamidi_map[] = {
   { LSTRKEY( "init" ), LFUNCVAL( midi_init_lua ) },
   { LSTRKEY( "write" ), LFUNCVAL( midi_write_lua ) },
