@@ -469,22 +469,138 @@ void midi_send_reset()
 
 // Reads data from uart and interprets it
 // Possible return values:
-//   defs[ "msg_new_message" ] -> A new message was received and finished
-//   defs[ "msg_in_message" ]  -> A new message was received, but is not complete
-//   defs[ "msg_no_message" ]  -> Nothing or invalid data was received
+//   msg_new_message -> A new message was received and finished
+//   msg_in_message  -> A new message was received, but is not complete
+//   msg_no_message  -> Nothing or invalid data was received
 //
-// The data read is stored in the message table:
-//   message[ defs[ "msg_code" ] ]    -> MIDI code ( from defs table ) of the message
-//   message[ defs[ "msg_channel" ] ] -> MIDI channel of the message
-//   message[ defs[ "msg_data" ] ]    -> Data 1 parameter of the message
-//   message[ defs[ "msg_data2" ] ]   -> Data 2 parameter of the message
+// The data read is stored in the out vector ( this will be allocated by this
+// function ):
+//   out[0]    -> MIDI code ( from defs table ) of the message
+//   out[1]    -> MIDI channel of the message / ID in system exclusive messages
+//   out[2]    -> Data 1 parameter of the message
+//   out[3]    -> Data 2 parameter of the message
 //
 // Note: Not all messages have Data 1 or Data 2
-// Note 2: If a 14bit value is expectes, message[ defs[ "msg_data" ] ] will hold the 14bit value
-// Note 3: On system exclusive messages, message[ defs[ "msg_channel" ] ] is the ID
-char receive( int timeout, char timer_id )
+// Note 2: If a 14bit value is expected, out[2] will hold the fine value and
+// out[3] the coarse value. Use the midi_encode_14bit function to turn that into
+// a 14bit number.
+// Note 3: Usert must free the *out vector
+char receive( int timeout, char timer_id, char ** out )
 {
-  
+  static char in_message = 0;
+  static char sysEx = 0;
+  static unsigned int data_read = 0;
+  static unsigned int data_size = 0;
+  static unsigned int buffer_size = 0;
+
+
+  char * buffer;
+  char c; // Current character
+  int tmp;
+
+  while (1)
+  {
+    tmp = platform_s_uart_recv( timer_id, timeout );
+
+    if ( tmp != -1 )
+      c = (char)tmp; // We got a char
+    else
+      if ( in_message )
+        return msg_in_message; // Message is incomplete
+      else
+        return msg_no_message; // There is no message
+
+    if ( c & 128 ) // Begin of a message ( status byte )
+    {
+      if ( c == system_exclusive_end ) // Check if it's the end of a system exclusive message before
+      {                                // erasing the buffer
+        if ( in_message )
+        {
+          in_message = 0;
+          data_read = 0;
+
+          // Add the sysEx end byte so the user knows where the message ends
+          if ( data_read == buffer_size ) // Out vector is full
+            *out = realloc( *out, buffer_size + 2 ); // Note size of out before realloc is buffer_size +1
+
+          *out[ buffer_size +1 ] = system_exclusive_end;
+
+          return msg_new_message;
+        }
+        else
+        {
+          in_message = 0;
+          data_read = 0;
+          if ( *out != NULL )
+            free( *out );
+
+          *out = NULL;
+          return msg_no_message;
+        }
+      }
+
+      in_message = 1;
+      data_read = 0;
+
+      if ( c == system_exclusive_begin ) // SysEx message
+      {
+        data_size = 0;
+        sysEx = 1;
+        *out = (char *)malloc( 10 * sizeof( char ));
+        memset( *out, 0, 10 ); // Fill vector with 0s
+        buffer_size = 9; // size of the out vector minus 1 ( Message Type byte )
+        *out[0] = system_exclusive_begin;
+      }
+      else // Non SysEx message
+      {
+        sysEx = 0;
+        *out = (char *)malloc( 4 * sizeof( char ));
+        memset( *out, 0, 4 ); // Fill vector with 0s
+        buffer_size = 3; // size of the out vector minus 1 ( Message Type byte )
+        data_size = midi_message_data_bytes( c );
+        split_status( c, *out ); // Fill message type and channel values
+        data_read = 1;
+      }
+    }
+
+    if (( in_message ) && ( c < 128 )) // We are receiving a message, store the data !
+    {
+      // If it's a system exclusive message ...
+      if ( sysEx )
+      {
+        // Is it the ID byte ?
+        if ( data_read == 0 )
+        {
+          *out[1] = c;
+          data_read = 1;
+        }
+        else
+        {
+          // Concact the data
+          if ( data_read == buffer_size ) // Out vector is full
+          {
+            *out = realloc( *out, buffer_size + 10 );
+            memset( *out + data_read + 1, 0, 10 ); // Fill new space with 0s
+            buffer_size += 10;
+          }
+
+          data_read ++;
+          out[data_read] = c;
+        }
+      }
+      else // Non SysEx message
+      {
+        data_read ++;
+        out[data_read]  = c;
+
+        if ( data_read -1 == data_size )
+        {
+          in_message = 0;
+          return msg_new_message;
+        }
+      } // Non SysEx
+    } // Receiving a message if
+  } // While
 }
 
 const LUA_REG_TYPE eluamidi_map[] = {
