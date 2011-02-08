@@ -101,7 +101,7 @@ void midi_decode_14bit( int n, char *out )
 }
 
 // Internal function to join 2 bytes into a 14 bit number
-inline int midi_encode_14bit( fine, coarse )
+inline int midi_encode_14bit( char fine, char coarse )
 {
   return fine + 128 * coarse;
 }

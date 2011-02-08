@@ -1,5 +1,5 @@
 char midi_init( char port );
-inline int midi_encode_14bit( fine, coarse );
+inline int midi_encode_14bit( char fine, char coarse );
 void midi_decode_14bit( int n, char *out );
 void midi_send_control_change( char channel, char control, char value );
 void midi_send_14bit_control_change( char channel, char control_coarse, char control_fine, int value );
