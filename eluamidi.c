@@ -1,4 +1,4 @@
-i// #include "eluamidi.h"
+// #include "eluamidi.h"
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
@@ -601,6 +601,36 @@ char receive( int timeout, char timer_id, char ** out )
       } // Non SysEx
     } // Receiving a message if
   } // While
+}
+
+// Sends an all notes off message ( same as sending a note off message for each note on )
+void midi_send_all_notes_off( char channel )
+{
+  midi_send_control_change( channel, defs[ "cc_all_notes_off" ], 0 )
+}
+
+// Sends an all sound off message ( stops all sounds instantly )
+void midi_send_all_sound_off( char channel )
+{
+  midi_send_control_change( channel, defs[ "cc_all_sound_off" ], 0 )
+}
+
+// Sends an all controllers off message ( resets all controllers to the default values )
+void midi_send_all_controllers_off( char channel )
+{
+  midi_send_control_change( channel, defs[ "cc_all_controllers_off" ], 0 )
+}
+
+// Sends an monophonic operation message ( changes to monophonic mode )
+void midi_send_mono_operation( char channel )
+{
+  midi_send_control_change( channel, defs[ "cc_mono_operation" ], 0 )
+}
+
+// Sends an polyphonic operation message ( changes to polyphonic mode )
+void midi_send_poly_operation( char channel )
+{
+  midi_send_control_change( channel, defs[ "cc_poly_operation" ], 0 )
 }
 
 const LUA_REG_TYPE eluamidi_map[] = {
