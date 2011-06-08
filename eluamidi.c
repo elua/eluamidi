@@ -222,7 +222,7 @@ char midi_message_data_bytes( char status )
 }
 
 // Internal function to send a note on or note off
-void midi_send_note( char channel, char note, char on, char velocity )
+inline void midi_send_note( char channel, char note, char on, char velocity )
 {
   if ( on )
     midi_send_status( channel, note_on );
@@ -634,10 +634,144 @@ void midi_send_poly_operation( char channel )
   midi_send_control_change( channel, cc_poly_operation, 0 );
 }
 
+// -------- BIND ----------
+// Lua: midi.init( uart_id )
+int midi_init_lua( lua_State *L )
+{
+  midi_init( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// Lua: midi.send_control_change( channel, control_id, value )
+int midi_send_control_change_lua( lua_State *L )
+{
+  midi_send_control_change( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ), luaL_checkinteger( L, 3 ) );
+  return 0;
+}
+
+// Lua: midi.send_14bit_control_change( channel, coarse_control_id, fine_control_id, value )
+int midi_send_14bit_control_change_lua( lua_State *L )
+{
+  midi_send_14bit_control_change( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ), luaL_checkinteger( L, 3 ), luaL_checkinteger( L, 4 ) );
+  return 0;
+}
+
+// Lua: midi.send_note_on( channel, note, velocity )
+int midi_send_note_on_lua( lua_State *L )
+{
+  midi_send_note_on( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ), luaL_checkinteger( L, 3 ) );
+  return 0;
+}
+
+// Lua: midi.send_note_off( channel, note, velocity )
+int midi_send_note_off_lua( lua_State *L )
+{
+  midi_send_note_off( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ), luaL_checkinteger( L, 3 ) );
+  return 0;
+}
+
+// Lua: midi.send_after_touch( channel, note, pressure )
+int midi_send_after_touch_lua( lua_State *L )
+{
+  midi_send_after_touch( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ), luaL_checkinteger( L, 3 ) );
+  return 0;
+}
+
+// Lua: midi.send_program_change( channel, program )
+int midi_send_program_change_lua( lua_State *L )
+{
+  midi_send_program_change( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ) );
+  return 0;
+}
+  
+// Lua: midi.send_channel_pressure( channel, pressure )
+int midi_send_channel_pressure_lua( lua_State *L )
+{
+  midi_send_channel_pressure( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ) );
+  return 0;
+}
+  
+// Lua: midi.send_pitch_wheel( channel, pitch )
+int midi_send_pitch_wheel_lua( lua_State *L )
+{
+  midi_send_pitch_wheel( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ) );
+  return 0;
+}
+
+// Lua: midi.send_pitch_wheel( channel, pitch )
+int midi_send_pitch_wheel_lua( lua_State *L )
+{
+  midi_send_pitch_wheel( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ) );
+  return 0;
+}
+
+// Lua: midi.send_system_exclusive( id, data, data_size )
+int midi_send_system_exclusive_lua( lua_State *L )
+{
+  midi_send_system_exclusive( luaL_checkinteger( L, 1 ), luaL_checkstring( L, 2 ), luaL_checkinteger( L, 3 ) );
+  return 0;
+}
+
+// Lua: midi.send_gm_system_enable( channel )
+int midi_send_gm_system_enable_lua( lua_State *L )
+{
+  midi_send_gm_system_enable( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// Lua: midi.send_gm_system_disable( channel )
+int midi_send_gm_system_disable_lua( lua_State *L )
+{
+  midi_send_gm_system_disable( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// Lua: midi.send_master_volume( channel, volume )
+int midi_send_master_volume_lua( lua_State *L )
+{
+  midi_send_master_volume( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// Lua: midi.send_quarter_frame( time_code )
+int midi_send_quarter_frame_lua( lua_State *L )
+{
+  midi_send_quarter_frame( luaL_checkinteger( L, 1 ) & 0x7F );
+  return 0;
+}
+
+// Lua: midi.send_song_position( beat )
+int midi_send_song_position_lua( lua_State *L )
+{
+  midi_send_song_position( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// Lua: midi.send_song_select( song )
+int midi_send_song_select_lua( lua_State *L )
+{
+  midi_send_song_select( luaL_checkinteger( L, 1 ) & 0x7F );
+  return 0;
+}
+
+
 const LUA_REG_TYPE eluamidi_map[] = {
   { LSTRKEY( "init" ), LFUNCVAL( midi_init_lua ) },
-  { LSTRKEY( "write" ), LFUNCVAL( midi_write_lua ) },
-  { LSTRKEY( "goto" ), LFUNCVAL( midi_goto_lua ) },
+  { LSTRKEY( "send_control_change" ), LFUNCVAL( midi_send_control_change_lua ) },
+  { LSTRKEY( "send_14bit_control_change" ), LFUNCVAL( midi_send_14bit_control_change_lua ) },
+  { LSTRKEY( "send_note_on" ), LFUNCVAL( midi_send_note_on_lua ) },
+  { LSTRKEY( "send_note_off" ), LFUNCVAL( midi_send_note_off_lua ) },
+  { LSTRKEY( "send_after_touch" ), LFUNCVAL( midi_send_after_touch_lua ) },
+  { LSTRKEY( "send_program_change" ), LFUNCVAL( midi_send_program_change_lua ) },
+  { LSTRKEY( "send_channel_pressure" ), LFUNCVAL( midi_send_channel_pressure_lua ) },
+  { LSTRKEY( "send_pitch_wheel" ), LFUNCVAL( midi_send_pitch_wheel_lua ) },
+  { LSTRKEY( "send_system_exclusive" ), LFUNCVAL( midi_send_system_exclusive_lua ) },
+  { LSTRKEY( "send_gm_system_enable" ), LFUNCVAL( midi_send_gm_system_enable_lua ) },
+  { LSTRKEY( "send_gm_system_disable" ), LFUNCVAL( midi_send_gm_system_disable_lua ) },
+  { LSTRKEY( "send_master_volume" ), LFUNCVAL( midi_send_master_volume_lua ) },
+  { LSTRKEY( "send_quarter_frame" ), LFUNCVAL( midi_send_quarter_frame_lua ) },
+  { LSTRKEY( "send_song_position" ), LFUNCVAL( midi_send_song_position_lua ) },
+  { LSTRKEY( "send_song_select" ), LFUNCVAL( midi_send_select_lua ) },
   { LNILKEY, LNILVAL }
 };
 
