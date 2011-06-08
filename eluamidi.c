@@ -7,6 +7,7 @@
 #include "lrotable.h"
 #include "platform_conf.h"
 #include <string.h>
+#include <stdlib.h>
 
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h"
@@ -14,7 +15,7 @@
 
 // Define uart configuration
 #define baud 31250
-#define data_bits 8
+#define databits 8
 #define stop_bits PLATFORM_UART_STOPBITS_1
 #define parity PLATFORM_UART_PARITY_NONE
 
@@ -139,8 +140,8 @@ void midi_send_control_change( char channel, char control, char value )
     return;
 
   midi_send_status( channel, control_change );
-  platform_uart_write( uart_port, control );
-  platform_uart_write( uart_port, value );
+  platform_uart_send( uart_port, control );
+  platform_uart_send( uart_port, value );
 }
 
 
@@ -288,7 +289,7 @@ void midi_send_pitch_wheel( char channel, char pitch )
 
   midi_decode_14bit( pitch + pitch_wheel_middle, decoded );
 
-  midi_send_status( channel, pitch_wheel )
+  midi_send_status( channel, pitch_wheel );
   platform_uart_send( uart_port, decoded[0] );
   platform_uart_send( uart_port, decoded[1] );
 }
@@ -332,7 +333,7 @@ void midi_send_gm_system_enable_disable( char channel, char enable )
   if ( !midi_validate_se_channel( channel ) )
     return;
 
-  channel = channel -1
+  channel = channel -1;
   
   platform_uart_send( uart_port, system_exclusive_begin );
   platform_uart_send( uart_port, non_realtime_id );
@@ -345,13 +346,13 @@ void midi_send_gm_system_enable_disable( char channel, char enable )
 // Sends a General MIDI System Enable message
 void midi_send_gm_system_enable( char channel )
 {
-  midi_send_gm_system_enable_disable( channel, true );
+  midi_send_gm_system_enable_disable( channel, 1 );
 }
 
 // Sends a General MIDI System Disable message
 void midi_send_gm_system_disable( char channel )
 {
-  midi_send_gm_system_enable_disable( channel, false );
+  midi_send_gm_system_enable_disable( channel, 0 );
 }
 
 // Sends a Master Volume message - Sets the device's Master Volume ( 14 bit - value )
@@ -412,7 +413,7 @@ void midi_send_song_position( int beat )
 void midi_send_song_select( char song )
 {
   // Validate song
-  if ( !midi_7bits( song ) )
+  if ( !midi_7bit( song ) )
     return;
 
   platform_uart_send( uart_port, tm_song_select );
@@ -494,7 +495,7 @@ char receive( int timeout, char timer_id, char ** out )
   static unsigned int buffer_size = 0;
 
 
-  char * buffer;
+//  char * buffer;
   char c; // Current character
   int tmp;
 
@@ -558,7 +559,7 @@ char receive( int timeout, char timer_id, char ** out )
         memset( *out, 0, 4 ); // Fill vector with 0s
         buffer_size = 3; // size of the out vector minus 1 ( Message Type byte )
         data_size = midi_message_data_bytes( c );
-        split_status( c, *out ); // Fill message type and channel values
+        midi_split_status( c, *out ); // Fill message type and channel values
         data_read = 1;
       }
     }
@@ -585,13 +586,13 @@ char receive( int timeout, char timer_id, char ** out )
           }
 
           data_read ++;
-          out[data_read] = c;
+          *out[data_read] = c;
         }
       }
       else // Non SysEx message
       {
         data_read ++;
-        out[data_read]  = c;
+        *out[data_read]  = c;
 
         if ( data_read -1 == data_size )
         {
@@ -606,31 +607,31 @@ char receive( int timeout, char timer_id, char ** out )
 // Sends an all notes off message ( same as sending a note off message for each note on )
 void midi_send_all_notes_off( char channel )
 {
-  midi_send_control_change( channel, defs[ "cc_all_notes_off" ], 0 )
+  midi_send_control_change( channel, cc_all_notes_off, 0 );
 }
 
 // Sends an all sound off message ( stops all sounds instantly )
 void midi_send_all_sound_off( char channel )
 {
-  midi_send_control_change( channel, defs[ "cc_all_sound_off" ], 0 )
+  midi_send_control_change( channel, cc_all_sound_off, 0 );
 }
 
 // Sends an all controllers off message ( resets all controllers to the default values )
 void midi_send_all_controllers_off( char channel )
 {
-  midi_send_control_change( channel, defs[ "cc_all_controllers_off" ], 0 )
+  midi_send_control_change( channel, cc_all_controllers_off, 0 );
 }
 
 // Sends an monophonic operation message ( changes to monophonic mode )
 void midi_send_mono_operation( char channel )
 {
-  midi_send_control_change( channel, defs[ "cc_mono_operation" ], 0 )
+  midi_send_control_change( channel, cc_mono_operation, 0 );
 }
 
 // Sends an polyphonic operation message ( changes to polyphonic mode )
 void midi_send_poly_operation( char channel )
 {
-  midi_send_control_change( channel, defs[ "cc_poly_operation" ], 0 )
+  midi_send_control_change( channel, cc_poly_operation, 0 );
 }
 
 const LUA_REG_TYPE eluamidi_map[] = {
