@@ -89,20 +89,20 @@ char midi_init( char port )
 }
 
 // Is n a 7bit number?
-inline char midi_7bit( char n )
+inline char midi_7bit( unsigned char n )
 {
   return (( n >=0 ) && ( n <= 127 ));
 }
 
 // Internal function to split 14 bit data into 2 bytes
-void midi_decode_14bit( int n, char *out )
+void midi_decode_14bit( int n, unsigned char *out )
 {
   out[0] = n & 127;
   out[1] = ( n >> 7 ) & 127;
 }
 
 // Internal function to join 2 bytes into a 14 bit number
-inline int midi_encode_14bit( char fine, char coarse )
+inline int midi_encode_14bit( unsigned char fine, unsigned char coarse )
 {
   return fine + 128 * coarse;
 }
@@ -124,14 +124,14 @@ void midi_send_status( char channel, char message )
 
 // Internal function to split a status byte into message code and channel
 // out: message, channel
-void midi_split_status( char status, char * out )
+void midi_split_status( unsigned char status, unsigned char * out )
 {
   out[0] = status & 0xF0;
   out[1] = ( status & 0x0F ) +1;
 }
 
 // Sends a control change message for a 7 bit control
-void midi_send_control_change( char channel, char control, char value )
+void midi_send_control_change( char channel, unsigned char control, unsigned char value )
 {
   if ( !midi_7bit( value ))
     return;
@@ -146,9 +146,9 @@ void midi_send_control_change( char channel, char control, char value )
 
 
 // Sends a control change for a control with 14 bit precision
-void midi_send_14bit_control_change( char channel, char control_coarse, char control_fine, int value )
+void midi_send_14bit_control_change( char channel, unsigned char control_coarse, unsigned char control_fine, int value )
 {
-  char num[2];
+  unsigned char num[2];
   
   if (( value < 0 ) || ( value > 16383 ))
     return;
@@ -173,9 +173,9 @@ char midi_validate_se_channel( char channel )
 
 // Internal function that returns the number of data bytes of a message
 // Status is the Status Byte of the message
-char midi_message_data_len( char status )
+char midi_message_data_len( unsigned char status )
 {
-  char ss[2];
+  unsigned char ss[2];
   midi_split_status( status, ss );
 
   switch ( ss[0] )
@@ -189,6 +189,7 @@ char midi_message_data_len( char status )
     case pitch_wheel: return 14;
     case system_exclusive_begin: return msg_size_unknown;
   }
+  return 0;
 }
 
 char midi_message_data_size( char status )
@@ -280,12 +281,12 @@ void midi_send_channel_pressure( char channel, char pressure )
 }
 
 // Sends a pitch wheel message
-void midi_send_pitch_wheel( char channel, char pitch )
+void midi_send_pitch_wheel( char channel, int pitch )
 {
   if ( !midi_validate_channel( channel ) )
     return;
 
-  char decoded[2];
+  unsigned char decoded[2];
 
   midi_decode_14bit( pitch + pitch_wheel_middle, decoded );
 
@@ -369,7 +370,7 @@ void midi_send_master_volume( char channel, unsigned int volume )
   channel = channel -1;
 
   // Split 14 bit into 2 bytes
-  char out[2];
+  unsigned char out[2];
   midi_decode_14bit( volume, out );
 
   platform_uart_send( uart_port, system_exclusive_begin );
@@ -401,7 +402,7 @@ void midi_send_song_position( int beat )
   if ( beat & ( 1 << 14 ))
     return;
 
-  char out[2];
+  unsigned char out[2];
   midi_decode_14bit( beat, out );
 
   platform_uart_send( uart_port, tm_song_position );
@@ -476,7 +477,7 @@ void midi_send_reset()
 //
 // The data read is stored in the out vector ( this will be allocated by this
 // function ):
-//   out[0]    -> MIDI code ( from defs table ) of the message
+//   out[0]    -> MIDI code ( from defines table ) of the message
 //   out[1]    -> MIDI channel of the message / ID in system exclusive messages
 //   out[2]    -> Data 1 parameter of the message
 //   out[3]    -> Data 2 parameter of the message
@@ -486,7 +487,7 @@ void midi_send_reset()
 // out[3] the coarse value. Use the midi_encode_14bit function to turn that into
 // a 14bit number.
 // Note 3: Usert must free the *out vector
-char receive( int timeout, char timer_id, char ** out )
+char midi_receive( int timeout, char timer_id, unsigned char ** out )
 {
   static char in_message = 0;
   static char sysEx = 0;
@@ -495,16 +496,16 @@ char receive( int timeout, char timer_id, char ** out )
   static unsigned int buffer_size = 0;
 
 
-//  char * buffer;
-  char c; // Current character
+  static unsigned char * buffer = NULL;
+  unsigned char c; // Current character
   int tmp;
 
   while (1)
   {
-    tmp = platform_s_uart_recv( timer_id, timeout );
+    tmp = platform_uart_recv( uart_port, timer_id, timeout );
 
     if ( tmp != -1 )
-      c = (char)tmp; // We got a char
+      c = (unsigned char)tmp; // We got a char
     else
       if ( in_message )
         return msg_in_message; // Message is incomplete
@@ -522,9 +523,18 @@ char receive( int timeout, char timer_id, char ** out )
 
           // Add the sysEx end byte so the user knows where the message ends
           if ( data_read == buffer_size ) // Out vector is full
-            *out = realloc( *out, buffer_size + 2 ); // Note size of out before realloc is buffer_size +1
+            *out = realloc( *out, data_read + 2 ); // Note size of out before realloc is buffer_size +1
 
+          // Add status bytes
           *out[ buffer_size +1 ] = system_exclusive_end;
+          *out[0] = system_exclusive_begin;
+
+          // Copy the received data to the out vector
+          memcpy( *out + 1, buffer, data_read );
+
+          // Free the buffer
+          free( buffer );
+          buffer = NULL;
 
           return msg_new_message;
         }
@@ -532,10 +542,10 @@ char receive( int timeout, char timer_id, char ** out )
         {
           in_message = 0;
           data_read = 0;
-          if ( *out != NULL )
-            free( *out );
+          if ( buffer != NULL )
+            free( buffer );
 
-          *out = NULL;
+          buffer = NULL;
           return msg_no_message;
         }
       }
@@ -547,15 +557,15 @@ char receive( int timeout, char timer_id, char ** out )
       {
         data_size = 0;
         sysEx = 1;
-        *out = (char *)malloc( 10 * sizeof( char ));
-        memset( *out, 0, 10 ); // Fill vector with 0s
-        buffer_size = 9; // size of the out vector minus 1 ( Message Type byte )
+        buffer = (unsigned char *)malloc( 10 * sizeof( unsigned char ));
+        memset( buffer, 0, 10 ); // Fill vector with 0s
+        buffer_size = 10; // size of the out vector minus 1 ( Message Type byte )
         *out[0] = system_exclusive_begin;
       }
       else // Non SysEx message
       {
         sysEx = 0;
-        *out = (char *)malloc( 4 * sizeof( char ));
+        *out = (unsigned char *)malloc( 4 * sizeof( unsigned char ));
         memset( *out, 0, 4 ); // Fill vector with 0s
         buffer_size = 3; // size of the out vector minus 1 ( Message Type byte )
         data_size = midi_message_data_bytes( c );
@@ -569,25 +579,16 @@ char receive( int timeout, char timer_id, char ** out )
       // If it's a system exclusive message ...
       if ( sysEx )
       {
-        // Is it the ID byte ?
-        if ( data_read == 0 )
+        // Concact the data
+        if ( data_read == buffer_size ) // Out vector is full
         {
-          *out[1] = c;
-          data_read = 1;
+          buffer = realloc( buffer, buffer_size + 10 );
+          //memset( buffer + data_read + 1, 0, 10 ); // Fill new space with 0s
+          buffer_size += 10;
         }
-        else
-        {
-          // Concact the data
-          if ( data_read == buffer_size ) // Out vector is full
-          {
-            *out = realloc( *out, buffer_size + 10 );
-            memset( *out + data_read + 1, 0, 10 ); // Fill new space with 0s
-            buffer_size += 10;
-          }
 
-          data_read ++;
-          *out[data_read] = c;
-        }
+        data_read ++;
+        buffer[data_read] = c;
       }
       else // Non SysEx message
       {
@@ -698,17 +699,12 @@ int midi_send_pitch_wheel_lua( lua_State *L )
   return 0;
 }
 
-// Lua: midi.send_pitch_wheel( channel, pitch )
-int midi_send_pitch_wheel_lua( lua_State *L )
-{
-  midi_send_pitch_wheel( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ) );
-  return 0;
-}
-
 // Lua: midi.send_system_exclusive( id, data, data_size )
 int midi_send_system_exclusive_lua( lua_State *L )
 {
-  midi_send_system_exclusive( luaL_checkinteger( L, 1 ), luaL_checkstring( L, 2 ), luaL_checkinteger( L, 3 ) );
+  char * data = (char * )luaL_checkstring( L, 2 );
+  midi_send_system_exclusive( luaL_checkinteger( L, 1 ), data, luaL_checkinteger( L, 3 ) );
+  free(data);
   return 0;
 }
 
@@ -729,7 +725,7 @@ int midi_send_gm_system_disable_lua( lua_State *L )
 // Lua: midi.send_master_volume( channel, volume )
 int midi_send_master_volume_lua( lua_State *L )
 {
-  midi_send_master_volume( luaL_checkinteger( L, 1 ) );
+  midi_send_master_volume( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ) );
   return 0;
 }
 
@@ -754,6 +750,141 @@ int midi_send_song_select_lua( lua_State *L )
   return 0;
 }
 
+// Lua: midi.send_tune_request()
+int midi_send_tune_request_lua( lua_State *L )
+{
+  midi_send_tune_request();
+  return 0;
+}
+
+// Lua: midi.send_clock()
+int midi_send_clock_lua( lua_State *L )
+{
+  midi_send_clock();
+  return 0;
+}
+
+// Lua: midi.send_start()
+int midi_send_start_lua( lua_State *L )
+{
+  midi_send_start();
+  return 0;
+}
+
+// Lua: midi.send_continue()
+int midi_send_continue_lua( lua_State *L )
+{
+  midi_send_continue();
+  return 0;
+}
+
+// Lua: midi.send_stop()
+int midi_send_stop_lua( lua_State *L )
+{
+  midi_send_stop();
+  return 0;
+}
+
+// Lua: midi.send_active_sense()
+int midi_send_active_sense_lua( lua_State *L )
+{
+  midi_send_active_sense();
+  return 0;
+}
+
+// Lua: midi.send_reset()
+int midi_send_reset_lua( lua_State *L )
+{
+  midi_send_reset();
+  return 0;
+}
+
+int midi_se_message_length( unsigned char * m )
+{
+  int i;
+
+  i=0;
+  while ( m[i] != system_exclusive_end )
+     i++;
+
+  return i;
+}
+
+// Lua: midi.receive( timeout, timer_id )
+// Returns:
+// 1. status:
+//  - msg_new_message: New message received
+//  - msg_in_message: Incomplete message ( still receiving )
+//  - msg_no_message: No message received
+// 2. MIDI Message code
+// 3. MIDI Channel
+// 4. Data 1
+// 5. Data 
+int midi_receive_lua( lua_State *L )
+{
+  unsigned char  * out;
+  char status = midi_receive( luaL_checkinteger( L, 1 ), luaL_checkinteger( L, 2 ), &out );
+  int i;
+
+  if ( status == msg_new_message )
+  {
+    if ( out[0] == system_exclusive_begin )
+    {
+      lua_pushinteger( L, status );
+      lua_pushinteger( L, out[0] );
+      lua_pushlstring( L, (char *)&out[1], midi_se_message_length(out)-1 );
+
+      free(out);
+      return 3;
+    }
+    else
+    {
+      lua_pushinteger( L, status );
+      for (i=0; i<4; i++)
+        lua_pushinteger( L, out[i] );
+
+      free(out);
+      return 5;
+    }
+  }
+
+  return 0;
+}
+
+// Lua: midi.send_all_notes_off( channel )
+int midi_send_all_notes_off_lua( lua_State *L )
+{
+  midi_send_all_notes_off( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// Lua: midi.send_all_sound_off( channel )
+int midi_send_all_sound_off_lua( lua_State *L )
+{
+  midi_send_all_sound_off( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// LuaL midi.send_all_controllers_off( channel )
+int midi_send_all_controllers_off_lua( lua_State* L )
+{
+  midi_send_all_controllers_off( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// LuaL midi.send_mono_operation( channel )
+int midi_send_mono_operation_lua( lua_State *L )
+{
+  midi_send_mono_operation( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
+
+// LuaL midi.send_poly_operation( channel )
+int midi_send_poly_operation_lua( lua_State *L )
+{
+  midi_send_poly_operation( luaL_checkinteger( L, 1 ) );
+  return 0;
+}
 
 const LUA_REG_TYPE eluamidi_map[] = {
   { LSTRKEY( "init" ), LFUNCVAL( midi_init_lua ) },
@@ -771,7 +902,19 @@ const LUA_REG_TYPE eluamidi_map[] = {
   { LSTRKEY( "send_master_volume" ), LFUNCVAL( midi_send_master_volume_lua ) },
   { LSTRKEY( "send_quarter_frame" ), LFUNCVAL( midi_send_quarter_frame_lua ) },
   { LSTRKEY( "send_song_position" ), LFUNCVAL( midi_send_song_position_lua ) },
-  { LSTRKEY( "send_song_select" ), LFUNCVAL( midi_send_select_lua ) },
+  { LSTRKEY( "send_song_select" ), LFUNCVAL( midi_send_song_select_lua ) },
+  { LSTRKEY( "send_tune_request" ), LFUNCVAL( midi_send_tune_request_lua ) },
+  { LSTRKEY( "send_clock" ), LFUNCVAL( midi_send_clock_lua ) },
+  { LSTRKEY( "send_start" ), LFUNCVAL( midi_send_start_lua ) },
+  { LSTRKEY( "send_continue" ), LFUNCVAL( midi_send_continue_lua ) },
+  { LSTRKEY( "send_stop" ), LFUNCVAL( midi_send_stop_lua ) },
+  { LSTRKEY( "send_active_sense" ), LFUNCVAL( midi_send_active_sense_lua ) },
+  { LSTRKEY( "send_reset" ), LFUNCVAL( midi_send_reset_lua ) },
+  { LSTRKEY( "send_all_notes_off" ), LFUNCVAL( midi_send_all_notes_off_lua ) },
+  { LSTRKEY( "send_all_sound_off" ), LFUNCVAL( midi_send_all_sound_off_lua ) },
+  { LSTRKEY( "send_all_controllers__off" ), LFUNCVAL( midi_send_all_controllers_off_lua ) },
+  { LSTRKEY( "send_mono_operation" ), LFUNCVAL( midi_send_mono_operation_lua ) },
+  { LSTRKEY( "send_poly_operation" ), LFUNCVAL( midi_send_poly_operation_lua ) },
   { LNILKEY, LNILVAL }
 };
 
